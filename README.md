@@ -62,12 +62,21 @@ The AI Email Assistant is a Gradio-based application that helps users generate a
     - Click the "Generate Email" button to generate a draft email.
     - The AI will provide feedback and refine the email until it is finalized.
 
+## Screenshots
+
+Here you can add screenshots of the application in action. This helps users understand the UI and functionality at a glance.
+
+### Main Interface
+
+![Main Interface](assets\screenshots\image.png)
+
+
 ## File Structure
 
-- [email_feedback_gradio_standard.py](http://_vscodecontentref_/0): The main application file that sets up the Gradio UI and handles email generation and refinement.
-- [load_models.py](http://_vscodecontentref_/1): Contains the logic to load and use the DeepSeek AI model via Ollama.
-- [requirements.txt](http://_vscodecontentref_/2): Lists all the dependencies required for the project.
-- [.gitignore](http://_vscodecontentref_/3): Specifies files and directories to be ignored by Git.
+- [email_feedback_gradio_standard.py](http://_vscodecontentref_/1): The main application file that sets up the Gradio UI and handles email generation and refinement.
+- [load_models.py](http://_vscodecontentref_/2): Contains the logic to load and use the DeepSeek AI model via Ollama.
+- [requirements.txt](http://_vscodecontentref_/3): Lists all the dependencies required for the project.
+- [.gitignore](http://_vscodecontentref_/4): Specifies files and directories to be ignored by Git.
 
 ## Contributing
 
@@ -82,3 +91,4 @@ This project is licensed under the MIT License. See the LICENSE file for details
 - [Gradio](https://gradio.app/)
 - [Ollama](https://ollama.com/)
 - [Pydantic](https://pydantic-docs.helpmanual.io/)
+
