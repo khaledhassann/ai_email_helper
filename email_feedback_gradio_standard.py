@@ -1,101 +1,80 @@
 from __future__ import annotations
 import asyncio
-from dataclasses import dataclass,field
 import gradio as gr
-from pydantic import BaseModel, EmailStr
-from pydantic_ai import Agent
-from pydantic_ai.format_as_xml import format_as_xml
-from pydantic_ai.messages import ModelMessage
-from load_models import OPENAI_MODEL
+from load_models import generate_response  # Import the Ollama function
 
-@dataclass
-class User:
-    name: str
-    email: EmailStr
-    interests: list[str]
+# Define email tones
+TONE_OPTIONS = {
+    "casual": "Write in a friendly, relaxed, and conversational tone.",
+    "professional": "Write in a clear, direct, and professional tone.",
+    "formal": "Write in a highly structured, respectful, and polished tone."
+}
 
-@dataclass
-class Email:
-    subject: str
-    body: str
-
-class EmailRequiresWrite(BaseModel):
-    feedback: str
-
-class EmailOK(BaseModel):
-    pass
-
-email_writer_agent = Agent(
-    model=OPENAI_MODEL,
-    result_type=Email,
-    system_prompt=("Write a welcome email to our new members joining my AI Agent blog.","The first email must exclude interests")
-)
-
-feedback_agent = Agent[None, EmailRequiresWrite | EmailOK](
-    OPENAI_MODEL,
-    result_type = EmailRequiresWrite | EmailOK,
-    system_prompt=("Review the email and provide feedback"
-                   "The email must reference the user's specific interests"),
-)
-
-def create_user_xml(user: User):
-    return f'''
-    <user>
-        <name>{user.name}</name>
-        <email>{user.email}</email>
-        <interests>{', '.join(user.interests)}</interests>
-    </user>
-'''
-
-async def handle_email_flow(name, email, interests=''):
-    user = User(name=name, email=email, interests=interests.split(', '))
+async def handle_email_flow(name, email, purpose, tone):
+    """
+    Handles the email generation and refinement loop.
+    Uses Ollama (via `generate_response()`) to create and refine emails.
+    """
     messages = []
     feedback = None
 
     while True:
-        prompt = f"Write a welcome email:\n{create_user_xml(user)}" if not feedback else f"Refine the email based on feedback:\n{feedback}\n{create_user_xml(user)}"
+        # Construct the prompt dynamically
+        tone_instruction = TONE_OPTIONS.get(tone, "Write in a professional tone.")
+        prompt = (
+            f"{tone_instruction}\n"
+            f"Write an email with the following details:\n"
+            f"- Purpose: {purpose}\n"
+            f"- Recipient Name: {name}\n"
+            f"- Ensure the tone matches: {tone}.\n\n"
+        )
+
+        if feedback:
+            prompt = f"Refine the previous email based on this feedback: {feedback}\n{prompt}"
+
         email_subject, email_body, feedback = "Generating email...", "", ""
         yield email_subject, email_body, feedback
 
-        result = await email_writer_agent.run(prompt, message_history=messages)
-        messages += result.all_messages()
-        email = result.data
-        email_subject, email_body = email.subject, email.body
+        # Generate the email draft using Ollama
+        email_body = generate_response(prompt)
+        email_subject = f"Re: {purpose}"  # Auto-generate a basic subject line
 
         if not feedback:
             yield email_subject, email_body, "Draft generated, submitting for feedback..."
         else:
-            yield email_subject, email_body, "Refinement complete, submitting reviewing..."
-        
-        feedback_prompt = format_as_xml({'user': user, 'email': email})
-        feedback_result = await feedback_agent.run(feedback_prompt)
+            yield email_subject, email_body, "Refinement complete, reviewing again..."
 
-        if isinstance(feedback_result.data, EmailRequiresWrite):
-            feedback = feedback_result.data.feedback
+        # Ask for feedback on the generated email
+        feedback_prompt = f"Review this email:\n\n{email_body}\n\nIs this well-written? If not, suggest improvements."
+        feedback = generate_response(feedback_prompt)
+
+        # If feedback indicates changes are needed, loop again
+        if "needs improvement" in feedback.lower() or "refine" in feedback.lower():
             yield email_subject, email_body, f'Feedback: {feedback}'
-            await asyncio.sleep(7)
-        elif isinstance(feedback_result.data, EmailOK):
+            await asyncio.sleep(5)
+        else:
             yield email_subject, email_body, "Email finalized successfully!"
             break
 
+# Gradio UI
 with gr.Blocks() as demo:
-    gr.Markdown("## AI Email Feedback Agent")
+    gr.Markdown("## AI Email Assistant (Powered by Ollama)")
 
     with gr.Row():
-        name_input = gr.Textbox(label="Name", placeholder="Enter your name")
-        email_input = gr.Textbox(label="Email", placeholder="Enter your email")
-        interests_input = gr.Textbox(label="Interests", placeholder="Enter your interests (comma-separated)")
-    
-    email_subject = gr.Textbox(label="Email Subject", interactive=False)
-    email_body = gr.Textbox(label="Email Body", interactive=False, lines=5)
+        name_input = gr.Textbox(label="Recipient Name", placeholder="Enter recipient name")
+        email_input = gr.Textbox(label="Recipient Email", placeholder="Enter recipient email")
 
-    with gr.Row():
-        feedback_display = gr.Textbox(label="Feedback", interactive=False, lines=3)
+    email_purpose = gr.Textbox(label="Email Purpose", placeholder="What is this email about?")
+    email_tone = gr.Dropdown(choices=list(TONE_OPTIONS.keys()), label="Email Tone", value="professional")
 
-    generate_button = gr.Button(text="Generate Email")
+    email_subject = gr.Textbox(label="Generated Email Subject", interactive=False)
+    email_body = gr.Textbox(label="Generated Email Body", interactive=False, lines=5)
+    feedback_display = gr.Textbox(label="Feedback", interactive=False, lines=3)
+
+    generate_button = gr.Button(value="Generate Email")
     generate_button.click(
         handle_email_flow,
-        inputs=[name_input, email_input, interests_input],
+        inputs=[name_input, email_input, email_purpose, email_tone],
         outputs=[email_subject, email_body, feedback_display]
     )
 
